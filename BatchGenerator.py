@@ -42,6 +42,8 @@ class BatchGenerator(Sequence):
       self.train_imgs = self.filelist[:train_file_index]
       self.valid_imgs = self.filelist[train_file_index:]
 
+      self.shuffle = self.config['data_handling']['shuffle']
+
       self.n_chan,self.img_h,self.img_w = tuple(config['data_handling']['image_shape'])
    
 

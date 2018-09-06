@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import os,sys,optparse,logging,json,glob
+import os,sys,optparse,logging,json,glob,datetime
 import yolo_model
 from BatchGenerator import BatchGenerator
 import loss_func
@@ -57,15 +57,17 @@ def main():
    model.compile(loss=loss_func.loss, optimizer=optimizer)
    # loss_func.set_config(config)
    # model.compile(loss=loss_func.loss, optimizer=optimizer)
-
-   checkpoint = ModelCheckpoint(config['model_pars']['model_checkpoint_file'],
+   dateString = datetime.datetime.strftime(datetime.datetime.now(),'%Y-%m-%d-%H-%M-%S')
+   log_path = os.path.join(config['tensorboard']['log_dir'],dateString)
+   os.makedirs(log_path)
+   checkpoint = ModelCheckpoint(config['model_pars']['model_checkpoint_file'].format(date=dateString),
                               monitor='val_loss',
                               verbose=1,
                               save_best_only=True,
                               mode='min',
                               period=1)
 
-   tensorboard = TB(log_dir=config['tensorboard']['log_dir'],
+   tensorboard = TB(log_dir=log_path,
                               histogram_freq=config['tensorboard']['histogram_freq'],
                               write_graph=config['tensorboard']['write_graph'],
                               write_images=config['tensorboard']['write_images'],
