@@ -31,4 +31,8 @@ def loss(y_true, y_pred):
 
 
    return loss
-   
+
+
+def loss2(y_true,y_pred):
+
+   pass
