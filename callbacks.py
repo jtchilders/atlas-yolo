@@ -4,7 +4,7 @@ import tensorflow as tf
 
 class TB(callbacks.TensorBoard):
    def __init__(self, log_every=1, **kwargs):
-      super().__init__(**kwargs)
+      super(TB,self).__init__(**kwargs)
       self.log_every = log_every
       self.counter = 0
 
