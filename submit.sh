@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #COBALT -n 1
-#COBALT -t 10
+#COBALT -t 60
 #COBALT -q debug-flat-quad
 #COBALT -A datascience
 #COBALT --jobname atlas_yolo

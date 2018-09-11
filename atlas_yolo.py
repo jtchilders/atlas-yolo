@@ -49,7 +49,6 @@ def main():
    parser.add_argument('--kmp_affinity', default='granularity=fine,verbose,compact,1,0',
                        help='KMP AFFINITY')
    args = parser.parse_args()
-   config_proto = create_config_proto(args)
 
    if args.horovod:
       print("importing hvd")
@@ -63,10 +62,6 @@ def main():
    else:
       logging.basicConfig(level=logging.DEBUG,format='%(asctime)s %(levelname)s:%(name)s:%(thread)s:%(message)s')
 
-   logger.debug('tf session')
-   session = tf.Session(config=config_proto)
-   logger.debug('keras backend')
-   keras_backend.set_session(session)
 
    # load configuration
    config_file = json.load(open(args.config_file))
@@ -110,6 +105,12 @@ def main():
          os.makedirs(log_path)
    else:
       os.makedirs(log_path)
+   
+   config_proto = create_config_proto(args)
+   logger.debug('tf session')
+   session = tf.Session(config=config_proto)
+   logger.debug('keras backend')
+   keras_backend.set_session(session)
 
    logger.debug('compile model')
    model.compile(loss=loss_func.loss, optimizer=optimizer)
