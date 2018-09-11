@@ -1,15 +1,17 @@
 #!/usr/bin/env python
-print('top o the script')
 import os,argparse,logging,json,glob,datetime
+import numpy as np
 import yolo_model
 from BatchGenerator import BatchGenerator
 import loss_func
+
 from keras import optimizers
 from keras.callbacks import ModelCheckpoint
 from keras import backend as keras_backend
-import tensorflow as tf
 from callbacks import TB
-import numpy as np
+
+import tensorflow as tf
+
 logger = logging.getLogger(__name__)
 print('import complete')
 print('keras from: %s' % optimizers.__file__)
@@ -56,65 +58,42 @@ def main():
       print('horovod from: %s' % hvd.__file__)
       print('hvd init')
       hvd.init()
-      bcast_global_variables_op = hvd.broadcast_global_variables(0)
       print("Rank:",hvd.rank())
       logging.basicConfig(level=logging.DEBUG,format='%(asctime)s %(levelname)s:' + '{:05d}'.format(hvd.rank()) + ':%(name)s:%(thread)s:%(message)s')
    else:
       logging.basicConfig(level=logging.DEBUG,format='%(asctime)s %(levelname)s:%(name)s:%(thread)s:%(message)s')
 
+   
+   # logger.debug('create config proto')
+   # config_proto = create_config_proto(args)
+   # keras_backend.set_session(tf.Session(config=config_proto))
 
    # load configuration
    config_file = json.load(open(args.config_file))
 
-   # get file list
-   filelist = glob.glob(config_file['data_handling']['input_file_glob'])
-   logger.info('found %s input files',len(filelist))
-   if len(filelist) < 2:
-      raise Exception('length of file list needs to be at least 2 to have train & validate samples')
-
-   nfiles = len(filelist)
-   if args.num_files > 0:
-      nfiles = args.num_files
-
-   train_file_index = int(config_file['data_handling']['training_to_validation_ratio'] * nfiles)
-   np.random.shuffle(filelist)
-
+   # get inputs
+   train_gen,valid_gen = get_image_generators(config_file,args)
+   
+   # build model
    model = yolo_model.build_model(config_file)
-   model.summary()
 
-   logger.info('grid (w,h) = (%s,%s)',config_file['training']['gridW'],config_file['training']['gridH'])
+   # pass configuration to loss function
    loss_func.set_config(config_file)
 
-   train_imgs = filelist[:train_file_index]
-   train_gen = BatchGenerator(config_file,train_imgs)
-   valid_imgs = filelist[train_file_index:nfiles]
-   valid_gen = BatchGenerator(config_file,valid_imgs)
-
-   logger.info(' %s training batches; %s validation batches',len(train_gen),len(valid_gen))
-
-   dateString = datetime.datetime.strftime(datetime.datetime.now(),'%Y-%m-%d-%H-%M-%S')
-   log_path = os.path.join(config_file['tensorboard']['log_dir'],dateString)
-
+   
+   # create optmization function
    logger.debug('create Adam')
    optimizer = optimizers.Adam(lr=config_file['training']['learning_rate'], beta_1=0.9, beta_2=0.999, epsilon=1e-08, decay=0.0)
 
    if args.horovod:
       logger.debug('create horovod optimizer')
       optimizer = hvd.DistributedOptimizer(optimizer)
-      if hvd.rank() == 0:
-         os.makedirs(log_path)
-   else:
-      os.makedirs(log_path)
-   
-   config_proto = create_config_proto(args)
-   logger.debug('tf session')
-   session = tf.Session(config=config_proto)
-   logger.debug('keras backend')
-   keras_backend.set_session(session)
 
    logger.debug('compile model')
    model.compile(loss=loss_func.loss, optimizer=optimizer)
    
+   # create checkpoint callback
+   dateString = datetime.datetime.strftime(datetime.datetime.now(),'%Y-%m-%d-%H-%M-%S')
    checkpoint = ModelCheckpoint(config_file['model_pars']['model_checkpoint_file'].format(date=dateString),
                         monitor='val_loss',
                         verbose=1,
@@ -122,6 +101,9 @@ def main():
                         mode='min',
                         period=1)
 
+   # create log path for tensorboard
+   log_path = os.path.join(config_file['tensorboard']['log_dir'],dateString)
+   # create tensorboard callback
    tensorboard = TB(log_dir=log_path,
                         histogram_freq=config_file['tensorboard']['histogram_freq'],
                         write_graph=config_file['tensorboard']['write_graph'],
@@ -135,11 +117,14 @@ def main():
       # Horovod: broadcast initial variable states from rank 0 to all other processes.
       # This is necessary to ensure consistent initialization of all workers when
       # training is started with random weights or restored from a checkpoint.
-      callbacks.append(bcast_global_variables_op)
+      callbacks.append(hvd.broadcast_global_variables(0))
       if hvd.rank() == 0:
+         os.makedirs(log_path)
          callbacks.append(checkpoint)
    else:
       callbacks.append(checkpoint)
+      os.makedirs(log_path)
+
 
 
    logger.debug('call fit generator')
@@ -154,8 +139,28 @@ def main():
                         validation_steps = len(valid_gen))
    
 
+def get_image_generators(config_file,args):
+   # get file list
+   filelist = glob.glob(config_file['data_handling']['input_file_glob'])
+   logger.info('found %s input files',len(filelist))
+   if len(filelist) < 2:
+      raise Exception('length of file list needs to be at least 2 to have train & validate samples')
 
+   nfiles = len(filelist)
+   if args.num_files > 0:
+      nfiles = args.num_files
 
+   train_file_index = int(config_file['data_handling']['training_to_validation_ratio'] * nfiles)
+   np.random.shuffle(filelist)
+
+   train_imgs = filelist[:train_file_index]
+   train_gen = BatchGenerator(config_file,train_imgs)
+   valid_imgs = filelist[train_file_index:nfiles]
+   valid_gen = BatchGenerator(config_file,valid_imgs)
+
+   logger.info(' %s training batches; %s validation batches',len(train_gen),len(valid_gen))
+
+   return train_gen,valid_gen
 
 
 if __name__ == "__main__":

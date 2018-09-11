@@ -1,5 +1,5 @@
 import logging
-from keras.layers import Conv2D, Input, MaxPooling2D, BatchNormalization, Reshape, Lambda
+from keras.layers import Conv2D, Input, MaxPooling2D, BatchNormalization, Reshape
 from keras.models import Model
 from keras.layers.advanced_activations import LeakyReLU
 from keras.layers.merge import concatenate
@@ -7,7 +7,7 @@ from keras.layers.merge import concatenate
 logger = logging.getLogger(__name__)
 
 
-def build_model(config):
+def build_model(config,print_summary=True):
    
    input_image = Input(shape=tuple(config['data_handling']['image_shape']))
    output = input_image
@@ -29,7 +29,7 @@ def build_model(config):
       layer_num += 1
 
    # layers without pooling
-   for conf in [ 
+   for conf in [
                [64,(1,1)],
                [128,(3,3)],
                [256,(3,3)],
@@ -45,7 +45,7 @@ def build_model(config):
    skip_connection = output
 
    # 4 layers without pooling
-   for conf in [ 
+   for conf in [
                [512,(3,3)],
                [256,(1,1)],
                [512,(3,3)],
@@ -73,7 +73,7 @@ def build_model(config):
    n_grid_boxes_h = int(str(n_grid_boxes_h))
    config['training']['gridW'] = n_grid_boxes_w
    config['training']['gridH'] = n_grid_boxes_h
-   # n_boxes = config['model_pars']['max_box_per_image']
+
    logger.info('grid size: %s x %s',n_grid_boxes_w,n_grid_boxes_h)
 
    n_classes = len(config['data_handling']['classes'])
@@ -90,7 +90,12 @@ def build_model(config):
    # boxes = Input(shape=(n_grid_boxes_h, n_grid_boxes_w, 4 + 1 + n_classes))
    # output = Lambda(lambda args: args[0],name='lambda_{0}'.format(layer_num))([output, boxes])
 
-   return Model(input_image,output)
+   model = Model(input_image,output)
+
+   if print_summary:
+      model.summary()
+
+   return model
 
 
 def CBL_layer(input,
