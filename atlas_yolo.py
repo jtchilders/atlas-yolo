@@ -71,11 +71,13 @@ def main():
    # load configuration
    config_file = json.load(open(args.config_file))
 
-   # get inputs
-   train_gen,valid_gen = get_image_generators(config_file,args)
    
    # build model
    model = yolo_model.build_model(config_file)
+
+
+   # get inputs
+   train_gen,valid_gen = get_image_generators(config_file,args)
 
    # pass configuration to loss function
    loss_func.set_config(config_file)

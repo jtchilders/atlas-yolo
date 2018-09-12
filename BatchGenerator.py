@@ -204,6 +204,8 @@ class BatchGenerator(Sequence):
 
       logger.debug('x_batch = %s',np.sum(x_batch))
       logger.debug('y_batch = %s',np.sum(y_batch))
+      logger.debug('x_batch shape = %s',x_batch.shape)
+      logger.debug('y_batch shape = %s',y_batch.shape)
       logger.debug('exiting')
 
       # print(' new batch created', idx)

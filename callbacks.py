@@ -21,7 +21,7 @@ class TB(callbacks.TensorBoard):
             self.writer.add_summary(summary, self.counter)
          self.writer.flush()
 
-      super().on_batch_end(batch, logs)
+      super(TB,self).on_batch_end(batch, logs)
 
    def on_epoch_end(self, epoch, logs=None):
       for name, value in logs.items():
