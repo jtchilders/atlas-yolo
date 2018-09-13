@@ -113,7 +113,7 @@ def main():
                         write_grads=config_file['tensorboard']['write_grads'],
                         embeddings_freq=config_file['tensorboard']['embeddings_freq'])
 
-   callbacks = []
+   callbacks = [tensorboard]
 
    if args.horovod:
       # Horovod: broadcast initial variable states from rank 0 to all other processes.
@@ -124,10 +124,8 @@ def main():
       if hvd.rank() == 0:
          os.makedirs(log_path)
          callbacks.append(checkpoint)
-         callbacks.append(tensorboard)
    else:
       callbacks.append(checkpoint)
-      callbacks.append(tensorboard)
       os.makedirs(log_path)
 
 
