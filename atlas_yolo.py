@@ -96,24 +96,13 @@ def main():
    
    # create checkpoint callback
    dateString = datetime.datetime.strftime(datetime.datetime.now(),'%Y-%m-%d-%H-%M-%S')
-   checkpoint = ModelCheckpoint(config_file['model_pars']['model_checkpoint_file'].format(date=dateString),
-                        monitor='val_loss',
-                        verbose=1,
-                        save_best_only=True,
-                        mode='min',
-                        period=1)
+   
 
    # create log path for tensorboard
    log_path = os.path.join(config_file['tensorboard']['log_dir'],dateString)
-   # create tensorboard callback
-   tensorboard = TB(log_dir=log_path,
-                        histogram_freq=config_file['tensorboard']['histogram_freq'],
-                        write_graph=config_file['tensorboard']['write_graph'],
-                        write_images=config_file['tensorboard']['write_images'],
-                        write_grads=config_file['tensorboard']['write_grads'],
-                        embeddings_freq=config_file['tensorboard']['embeddings_freq'])
+   
 
-   callbacks = [tensorboard]
+   callbacks = []
 
    if args.horovod:
       # Horovod: broadcast initial variable states from rank 0 to all other processes.
@@ -123,10 +112,39 @@ def main():
       callbacks.append(bcast_globals)
       if hvd.rank() == 0:
          os.makedirs(log_path)
+         # create tensorboard callback
+         tensorboard = TB(log_dir=log_path,
+                        histogram_freq=config_file['tensorboard']['histogram_freq'],
+                        write_graph=config_file['tensorboard']['write_graph'],
+                        write_images=config_file['tensorboard']['write_images'],
+                        write_grads=config_file['tensorboard']['write_grads'],
+                        embeddings_freq=config_file['tensorboard']['embeddings_freq'])
+         checkpoint = ModelCheckpoint(config_file['model_pars']['model_checkpoint_file'].format(date=dateString),
+                        monitor='val_loss',
+                        verbose=1,
+                        save_best_only=True,
+                        mode='min',
+                        period=1)
          callbacks.append(checkpoint)
+         callbacks.append(tensorboard)
    else:
-      callbacks.append(checkpoint)
+      
       os.makedirs(log_path)
+      # create tensorboard callback
+      tensorboard = TB(log_dir=log_path,
+                     histogram_freq=config_file['tensorboard']['histogram_freq'],
+                     write_graph=config_file['tensorboard']['write_graph'],
+                     write_images=config_file['tensorboard']['write_images'],
+                     write_grads=config_file['tensorboard']['write_grads'],
+                     embeddings_freq=config_file['tensorboard']['embeddings_freq'])
+      checkpoint = ModelCheckpoint(config_file['model_pars']['model_checkpoint_file'].format(date=dateString),
+                     monitor='val_loss',
+                     verbose=1,
+                     save_best_only=True,
+                     mode='min',
+                     period=1)
+      callbacks.append(checkpoint)
+      callbacks.append(tensorboard)
 
 
 
