@@ -64,9 +64,9 @@ def main():
       logging.basicConfig(level=logging.DEBUG,format='%(asctime)s %(levelname)s:%(name)s:%(thread)s:%(message)s')
 
    
-   # logger.debug('create config proto')
-   # config_proto = create_config_proto(args)
-   # keras_backend.set_session(tf.Session(config=config_proto))
+   logger.debug('create config proto')
+   config_proto = create_config_proto(args)
+   keras_backend.set_session(tf.Session(config=config_proto))
 
    # load configuration
    config_file = json.load(open(args.config_file))
@@ -96,44 +96,71 @@ def main():
    
    # create checkpoint callback
    dateString = datetime.datetime.strftime(datetime.datetime.now(),'%Y-%m-%d-%H-%M-%S')
-   checkpoint = ModelCheckpoint(config_file['model_pars']['model_checkpoint_file'].format(date=dateString),
+   
+   # create log path for tensorboard
+   log_path = os.path.join(config_file['tensorboard']['log_dir'],dateString)
+   
+
+   callbacks = []
+   
+
+   verbose = config_file['training']['verbose']
+   if args.horovod:
+      
+      # Horovod: broadcast initial variable states from rank 0 to all other processes.
+      # This is necessary to ensure consistent initialization of all workers when
+      # training is started with random weights or restored from a checkpoint.
+      callbacks.append(hvd.callbacks.BroadcastGlobalVariablesCallback(0))
+      
+      # Horovod: average metrics among workers at the end of every epoch.
+      #
+      # Note: This callback must be in the list before the ReduceLROnPlateau,
+      # TensorBoard or other metrics-based callbacks.
+      callbacks.append(hvd.callbacks.MetricAverageCallback())
+
+      # create tensorboard callback
+      tensorboard = TB(log_dir=log_path,
+                     histogram_freq=config_file['tensorboard']['histogram_freq'],
+                     write_graph=config_file['tensorboard']['write_graph'],
+                     write_images=config_file['tensorboard']['write_images'],
+                     write_grads=config_file['tensorboard']['write_grads'],
+                     embeddings_freq=config_file['tensorboard']['embeddings_freq'])
+      callbacks.append(tensorboard)
+      
+      if hvd.rank() == 0:
+         verbose = config_file['training']['verbose']
+         os.makedirs(log_path)
+
+         checkpoint = ModelCheckpoint(config_file['model_pars']['model_checkpoint_file'].format(date=dateString),
                         monitor='val_loss',
                         verbose=1,
                         save_best_only=True,
                         mode='min',
                         period=1)
-
-   # create log path for tensorboard
-   log_path = os.path.join(config_file['tensorboard']['log_dir'],dateString)
-   # create tensorboard callback
-   tensorboard = TB(log_dir=log_path,
-                        histogram_freq=config_file['tensorboard']['histogram_freq'],
-                        write_graph=config_file['tensorboard']['write_graph'],
-                        write_images=config_file['tensorboard']['write_images'],
-                        write_grads=config_file['tensorboard']['write_grads'],
-                        embeddings_freq=config_file['tensorboard']['embeddings_freq'])
-
-   callbacks = [tensorboard]
-
-   if args.horovod:
-      # Horovod: broadcast initial variable states from rank 0 to all other processes.
-      # This is necessary to ensure consistent initialization of all workers when
-      # training is started with random weights or restored from a checkpoint.
-      bcast_globals = hvd.callbacks.BroadcastGlobalVariablesCallback(0)
-      callbacks.append(bcast_globals)
-      if hvd.rank() == 0:
-         os.makedirs(log_path)
          callbacks.append(checkpoint)
+
+         
+      else:
+         verbose = 0
    else:
-      callbacks.append(checkpoint)
       os.makedirs(log_path)
 
+      checkpoint = ModelCheckpoint(config_file['model_pars']['model_checkpoint_file'].format(date=dateString),
+                     monitor='val_loss',
+                     verbose=1,
+                     save_best_only=True,
+                     mode='min',
+                     period=1)
+      callbacks.append(checkpoint)
+
+
+   logger.debug('callbacks: %s',callbacks)
 
 
    logger.debug('call fit generator')
    model.fit_generator(generator         = train_gen,
                         epochs           = config_file['training']['epochs'],
-                        verbose          = config_file['training']['verbose'],
+                        verbose          = verbose,
                         validation_data  = valid_gen,
                         callbacks        = callbacks,
                         workers          = 1,
