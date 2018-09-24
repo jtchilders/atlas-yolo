@@ -2,7 +2,7 @@
 import os,argparse,logging,json,glob,datetime
 import numpy as np
 import yolo_model
-from BatchGenerator import BatchGenerator
+from BatchGenerator import BatchGenerator,BatchGeneratorGroup
 import loss_func
 
 from keras import optimizers
@@ -36,8 +36,10 @@ def main():
    parser = argparse.ArgumentParser(description='Atlas Training')
    parser.add_argument('--config_file', '-c',
                        help='configuration in standard json format.')
+   parser.add_argument('--tb_logdir', '-l',
+                       help='tensorboard logdir for this job.',default=None)
    parser.add_argument('--horovod', default=False,
-                       help='use Horovod')
+                       help='use Horovod',action='store_true')
    parser.add_argument('--num_files','-n', default=-1, type=int,
                        help='limit the number of files to process. default is all')
    parser.add_argument('--lr', default=0.01, type=int,
@@ -50,8 +52,18 @@ def main():
                        help='KMP BLOCKTIME')
    parser.add_argument('--kmp_affinity', default='granularity=fine,verbose,compact,1,0',
                        help='KMP AFFINITY')
+   parser.add_argument('--batchgroup',action='store_true',default=False,
+                       help='use subprocess group batchgroup instead of standard BatchGenerator')
+   parser.add_argument('--batchgroup_size',type=int,default=4,
+                       help='number of subprocesses in the batchgroup')
+   parser.add_argument('--batch_queue_size',type=int,default=4,
+                       help='number of batch queues in the fit_generator')
+   parser.add_argument('--batch_queue_workers',type=int,default=0,
+                       help='number of batch workers in the fit_generator')
+
    args = parser.parse_args()
 
+   log_level = logging.INFO
    if args.horovod:
       print("importing hvd")
       import horovod.keras as hvd
@@ -59,9 +71,24 @@ def main():
       print('hvd init')
       hvd.init()
       print("Rank:",hvd.rank())
-      logging.basicConfig(level=logging.DEBUG,format='%(asctime)s %(levelname)s:' + '{:05d}'.format(hvd.rank()) + ':%(name)s:%(thread)s:%(message)s')
+      if hvd.rank() > 0:
+         log_level = logging.WARNING
+      logging.basicConfig(level=log_level,format='%(asctime)s %(levelname)s:' + '{:05d}'.format(hvd.rank()) + ':%(name)s:%(thread)s:%(message)s')
    else:
-      logging.basicConfig(level=logging.DEBUG,format='%(asctime)s %(levelname)s:%(name)s:%(thread)s:%(message)s')
+      logging.basicConfig(level=log_level,format='%(asctime)s %(levelname)s:%(name)s:%(thread)s:%(message)s')
+
+   logger.info('config_file:           %s',args.config_file)
+   logger.info('tb_logdir:             %s',args.tb_logdir)
+   logger.info('horovod:               %s',args.horovod)
+   logger.info('num_files:             %s',args.num_files)
+   logger.info('lr:                    %s',args.lr)
+   logger.info('num_intra:             %s',args.num_intra)
+   logger.info('kmp_blocktime:         %s',args.kmp_blocktime)
+   logger.info('kmp_affinity:          %s',args.kmp_affinity)
+   logger.info('batchgroup:            %s',args.batchgroup)
+   logger.info('batchgroup_size:       %s',args.batchgroup_size)
+   logger.info('batch_queue_size:      %s',args.batch_queue_size)
+   logger.info('batch_queue_workers:   %s',args.batch_queue_workers)
 
    
    logger.debug('create config proto')
@@ -99,6 +126,8 @@ def main():
    
    # create log path for tensorboard
    log_path = os.path.join(config_file['tensorboard']['log_dir'],dateString)
+   if args.tb_logdir is not None:
+      log_path = args.tb_logdir
    
 
    callbacks = []
@@ -163,10 +192,18 @@ def main():
                         verbose          = verbose,
                         validation_data  = valid_gen,
                         callbacks        = callbacks,
-                        workers          = 1,
-                        max_queue_size   = 5,
+                        workers          = args.batch_queue_workers,
+                        max_queue_size   = args.batch_queue_size,
                         steps_per_epoch  = len(train_gen),
-                        validation_steps = len(valid_gen))
+                        validation_steps = config_file['training']['steps_per_valid'],
+                        use_multiprocessing=True)
+   logger.debug('done fit gen')
+
+   if args.batchgroup:
+      train_gen.exit()
+      valid_gen.exit()
+
+   logger.info('done')
    
 
 def get_image_generators(config_file,args):
@@ -184,9 +221,15 @@ def get_image_generators(config_file,args):
    np.random.shuffle(filelist)
 
    train_imgs = filelist[:train_file_index]
-   train_gen = BatchGenerator(config_file,train_imgs)
+   if args.batchgroup:
+      train_gen = BatchGeneratorGroup(config_file,train_imgs,workers=args.batchgroup_size,name='train')
+   else:
+      train_gen = BatchGenerator(config_file,train_imgs)
    valid_imgs = filelist[train_file_index:nfiles]
-   valid_gen = BatchGenerator(config_file,valid_imgs)
+   if args.batchgroup:
+      valid_gen = BatchGeneratorGroup(config_file,valid_imgs,workers=args.batchgroup_size,name='valid')
+   else:
+      valid_gen = BatchGenerator(config_file,valid_imgs)
 
    logger.info(' %s training batches; %s validation batches',len(train_gen),len(valid_gen))
 
