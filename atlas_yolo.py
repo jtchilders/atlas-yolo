@@ -60,10 +60,15 @@ def main():
                        help='number of batch queues in the fit_generator')
    parser.add_argument('--batch_queue_workers',type=int,default=0,
                        help='number of batch workers in the fit_generator')
+   parser.add_argument('--timeline',action='store_true',default=False,
+                       help='enable chrome timeline profiling')
+   parser.add_argument('--timeline_filename',default='timeline_profile.json',
+                       help='filename to use for timeline json data')
 
    args = parser.parse_args()
 
-   log_level = logging.INFO
+
+   log_level = logging.DEBUG
    if args.horovod:
       print("importing hvd")
       import horovod.keras as hvd
@@ -73,9 +78,9 @@ def main():
       print("Rank:",hvd.rank())
       if hvd.rank() > 0:
          log_level = logging.WARNING
-      logging.basicConfig(level=log_level,format='%(asctime)s %(levelname)s:' + '{:05d}'.format(hvd.rank()) + ':%(name)s:%(thread)s:%(message)s')
+      logging.basicConfig(level=log_level,format='%(asctime)s %(levelname)s:' + '{:05d}'.format(hvd.rank()) + ':%(name)s:%(process)s:%(thread)s:%(message)s')
    else:
-      logging.basicConfig(level=log_level,format='%(asctime)s %(levelname)s:%(name)s:%(thread)s:%(message)s')
+      logging.basicConfig(level=log_level,format='%(asctime)s %(levelname)s:%(name)s:%(process)s:%(thread)s:%(message)s')
 
    logger.info('config_file:           %s',args.config_file)
    logger.info('tb_logdir:             %s',args.tb_logdir)
@@ -89,7 +94,11 @@ def main():
    logger.info('batchgroup_size:       %s',args.batchgroup_size)
    logger.info('batch_queue_size:      %s',args.batch_queue_size)
    logger.info('batch_queue_workers:   %s',args.batch_queue_workers)
+   logger.info('timeline:              %s',args.timeline)
+   logger.info('timeline_filename:     %s',args.timeline_filename)
 
+   if args.timeline:
+      from tensorflow.python.client import timeline
    
    logger.debug('create config proto')
    config_proto = create_config_proto(args)
@@ -109,17 +118,27 @@ def main():
    # pass configuration to loss function
    loss_func.set_config(config_file)
 
+   # set learning rate
+   if args.horovod:
+      learning_rate = config_file['training']['learning_rate'] * hvd.size()
+   else:
+      learning_rate = config_file['training']['learning_rate']
    
    # create optmization function
    logger.debug('create Adam')
-   optimizer = optimizers.Adam(lr=config_file['training']['learning_rate'], beta_1=0.9, beta_2=0.999, epsilon=1e-08, decay=0.0)
+   optimizer = optimizers.Adam(lr=learning_rate, beta_1=0.9, beta_2=0.999, epsilon=1e-08, decay=0.0)
 
    if args.horovod:
       logger.debug('create horovod optimizer')
       optimizer = hvd.DistributedOptimizer(optimizer)
 
    logger.debug('compile model')
-   model.compile(loss=loss_func.loss, optimizer=optimizer)
+   if args.timeline:
+      run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
+      run_metadata = tf.RunMetadata()
+      model.compile(loss=loss_func.loss2, optimizer=optimizer, options=run_options, run_metadata=run_metadata)
+   else:
+      model.compile(loss=loss_func.loss2, optimizer=optimizer)
    
    # create checkpoint callback
    dateString = datetime.datetime.strftime(datetime.datetime.now(),'%Y-%m-%d-%H-%M-%S')
@@ -196,12 +215,18 @@ def main():
                         max_queue_size   = args.batch_queue_size,
                         steps_per_epoch  = len(train_gen),
                         validation_steps = config_file['training']['steps_per_valid'],
-                        use_multiprocessing=True)
+                        use_multiprocessing=False)
    logger.debug('done fit gen')
 
    if args.batchgroup:
       train_gen.exit()
       valid_gen.exit()
+
+   if args.timeline:
+      logger.info('output timeline profile')
+      trace = timeline.Timeline(step_stats=run_metadata.step_stats)
+      with open(args.timeline_filename, 'w') as f:
+         f.write(trace.generate_chrome_trace_format())
 
    logger.info('done')
    
@@ -224,12 +249,12 @@ def get_image_generators(config_file,args):
    if args.batchgroup:
       train_gen = BatchGeneratorGroup(config_file,train_imgs,workers=args.batchgroup_size,name='train')
    else:
-      train_gen = BatchGenerator(config_file,train_imgs)
+      train_gen = BatchGenerator(config_file,train_imgs,name='train')
    valid_imgs = filelist[train_file_index:nfiles]
    if args.batchgroup:
       valid_gen = BatchGeneratorGroup(config_file,valid_imgs,workers=args.batchgroup_size,name='valid')
    else:
-      valid_gen = BatchGenerator(config_file,valid_imgs)
+      valid_gen = BatchGenerator(config_file,valid_imgs,name='valid')
 
    logger.info(' %s training batches; %s validation batches',len(train_gen),len(valid_gen))
 

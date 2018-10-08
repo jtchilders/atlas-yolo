@@ -15,11 +15,12 @@ def build_model(config,print_summary=True):
    layer_num = 0
 
    # 2 layers with pooling
-   for conf in [[32,(3,3),(2,2)],
+   for conf in [[128,(3,9),(2,4)],
+                [64,(3,3),(2,4)],
                 [64,(3,3),(1,2)],
-                [128,(3,3),(1,2)],
-                [128,(3,3),(1,2)],
-                [128,(3,3),(2,2)],]:
+                #[128,(3,3),(1,2)],
+                #[128,(3,3),(2,2)],
+               ]:
       output = CBLP_layer(output,
                filters=conf[0],
                window=conf[1],
@@ -47,9 +48,9 @@ def build_model(config,print_summary=True):
    # 4 layers without pooling
    for conf in [
                [512,(3,3)],
-               [256,(1,1)],
-               [512,(3,3)],
-               [1024,(3,3)],
+               #[256,(1,1)],
+               #[512,(3,3)],
+               #[1024,(3,3)],
                ]:
       output = CBL_layer(output,
                filters=conf[0],
@@ -60,7 +61,7 @@ def build_model(config,print_summary=True):
 
    output = concatenate([skip_connection,output],axis=1)
 
-   for conf in [[1024,(3,3)]]:
+   for conf in [[512,(3,3)]]:
       output = CBLP_layer(output,
                filters=conf[0],
                window=conf[1],

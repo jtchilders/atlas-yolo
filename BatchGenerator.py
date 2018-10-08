@@ -26,15 +26,17 @@ CLASS_END = 10
 
 
 class BatchGenerator(Sequence):
-   def __init__(self,config,filelist):
+   def __init__(self,config,filelist,name='',truth_passthrough=False):
 
       self.config          = config
+      self.name            = name
+      self.truth_passthrough = truth_passthrough
 
       # get file list
       self.filelist        = filelist
-      logger.info('found %s input files',len(self.filelist))
+      logger.info('%s: found %s input files',self.name,len(self.filelist))
       if len(self.filelist) < 1:
-         raise Exception('length of file list needs to be at least 1')
+         raise Exception('%s: length of file list needs to be at least 1' % self.name)
 
       train_file_index = int(config['data_handling']['training_to_validation_ratio'] * len(self.filelist))
       np.random.shuffle(self.filelist)
@@ -71,19 +73,19 @@ class BatchGenerator(Sequence):
       self.truth_boxes = None
 
 
-      logger.debug('evts_per_file:           %s',self.evts_per_file)
-      logger.debug('nevts:                   %s',self.nevts)
-      logger.debug('batch_size:              %s',self.batch_size)
-      logger.debug('max_box_per_image:       %s',self.max_box_per_image)
-      logger.debug('n_grid_boxes_w:          %s',self.n_grid_boxes_w)
-      logger.debug('n_grid_boxes_h:          %s',self.n_grid_boxes_h)
-      logger.debug('n_classes:               %s',self.n_classes)
-      logger.debug('pixels_per_grid_w:       %s',self.pixels_per_grid_w)
-      logger.debug('pixels_per_grid_h:       %s',self.pixels_per_grid_h)
+      logger.debug('%s: evts_per_file:           %s',self.name,self.evts_per_file)
+      logger.debug('%s: nevts:                   %s',self.name,self.nevts)
+      logger.debug('%s: batch_size:              %s',self.name,self.batch_size)
+      logger.debug('%s: max_box_per_image:       %s',self.name,self.max_box_per_image)
+      logger.debug('%s: n_grid_boxes_w:          %s',self.name,self.n_grid_boxes_w)
+      logger.debug('%s: n_grid_boxes_h:          %s',self.name,self.n_grid_boxes_h)
+      logger.debug('%s: n_classes:               %s',self.name,self.n_classes)
+      logger.debug('%s: pixels_per_grid_w:       %s',self.name,self.pixels_per_grid_w)
+      logger.debug('%s: pixels_per_grid_h:       %s',self.name,self.pixels_per_grid_h)
 
 
    def __len__(self):
-      return int(np.ceil(float(self.nevts) / self.batch_size))
+      return int(float(self.nevts) / self.batch_size)
 
    def num_classes(self):
       return len(self.config['data_handling']['classes'])
@@ -96,7 +98,7 @@ class BatchGenerator(Sequence):
 
       try:
          start = time.time()
-         logger.debug('starting get batch')
+         logger.debug('%s: starting get batch',self.name)
 
          # count the number of images
          instance_count = 0
@@ -110,33 +112,39 @@ class BatchGenerator(Sequence):
          # b_batch = np.zeros((self.batch_size, self.n_grid_boxes_h,
          #                     self.n_grid_boxes_w, 4 + 1 + self.n_classes))
          # desired network output
-         y_batch = np.zeros((self.batch_size, self.n_grid_boxes_h,
+         if not self.truth_passthrough:
+            y_batch = np.zeros((self.batch_size, self.n_grid_boxes_h,
                              self.n_grid_boxes_w, 4 + 1 + self.n_classes))
+         else:
+            y_batch = np.zeros((self.batch_size,4+1+self.n_classes))
 
          ##########
          # calculate which file needed based on list of files, events per file,
          # ad which batch index
 
-         file_index = int(idx / self.evts_per_file)
+         epoch_image_index = idx * self.batch_size
+
+         file_index = int(epoch_image_index / self.evts_per_file)
          if file_index >= len(self.filelist):
-            raise Exception('file_index {0} is outside range for filelist {1}'.format(file_index,len(self.filelist)))
+            raise Exception('{0}: file_index {1} is outside range for filelist {2}'.format(self.name,file_index,len(self.filelist)))
          
-         image_index = idx % self.evts_per_file
+         image_index = epoch_image_index % self.evts_per_file
          
-         logger.debug('opening file with idx %s file_index %s image_index %s',
+         logger.debug('%s: opening file with idx %s file_index %s image_index %s',self.name,
                idx,
                file_index,image_index)
 
          ######
          # open the file
          if self.current_file_index != file_index or self.images is None:
-            logger.debug('new file opening %s %s',self.current_file_index,file_index)
+            logger.debug('%s: new file opening %s %s',self.name,self.current_file_index,file_index)
             self.current_file_index = file_index
             file_content = np.load(self.filelist[self.current_file_index])
             self.images = file_content['raw']
             self.truth_boxes = file_content['truth']
+            logger.debug('%s: shape images %s truth %s',self.name,self.images.shape,self.truth_boxes.shape)
          else:
-            logger.debug('not opening file  %s %s',self.current_file_index,file_index)
+            logger.debug('%s: not opening file  %s %s',self.name,self.current_file_index,file_index)
          
             
 
@@ -144,12 +152,12 @@ class BatchGenerator(Sequence):
          # loop over the batch size
          # create the outputs
          for i in range(self.batch_size):
-            logger.debug('loop %s start',i)
+            logger.debug('%s: loop %s start',self.name,i)
 
             # if our image index has gone past the number
             # of images per file, then open the next file
             if image_index >= self.evts_per_file:
-               logger.debug('new file opening %s',self.current_file_index)
+               logger.debug('%s: new file opening %s',self.name,self.current_file_index)
                self.current_file_index += 1
                
                if self.current_file_index >= len(self.filelist):
@@ -159,17 +167,18 @@ class BatchGenerator(Sequence):
                file_content = np.load(self.filelist[self.current_file_index])
                self.images = file_content['raw']
                self.truth_boxes = file_content['truth']
+               logger.debug('%s: shape images %s truth %s',self.name,self.images.shape,self.truth_boxes.shape)
                image_index = 0
 
-            logger.debug('image_index = %s  file_index = %s',image_index,self.current_file_index)
+            logger.debug('%s: image_index = %s  file_index = %s',self.name,image_index,self.current_file_index)
 
             # get the image and boxes
             x_batch[instance_count] = self.images[image_index]
             all_objs = self.truth_boxes[image_index]
             obj = all_objs[0]
-            logger.warning('current batch generator only supports 1 object per image')
+            logger.warning('%s: current batch generator only supports 1 object per image',self.name)
 
-            logger.debug('loop %s file loaded',i)
+            logger.debug('%s: loop %s file loaded',self.name,i)
 
             # construct output from object's x, y, w, h
             # true_box_index = 0
@@ -188,7 +197,7 @@ class BatchGenerator(Sequence):
             # height in pixel coords (30)
             # convert to grid coords (30 / (256/16)) = 1.8
 
-            logger.debug('obj = %s',obj)
+            logger.debug('%s: obj = %s',self.name,obj)
             obj = np.multiply(obj,self.obj_multiplier)
 
             # truncate to get grid position (12,3)
@@ -203,10 +212,13 @@ class BatchGenerator(Sequence):
             sub[BBOX_CENTER_Y] = grid_y
             obj = obj - sub
 
-            logger.debug('new obj = %s',obj)
+            logger.debug('%s: new obj = %s',self.name,obj)
 
             # assign ground truth x, y, w, h, confidence and class probs to y_batch
-            y_batch[instance_count][grid_y][grid_x] = obj
+            if not self.truth_passthrough:
+               y_batch[instance_count][grid_y][grid_x] = obj
+            else:
+               y_batch[instance_count] = self.truth_boxes[image_index]
 
             # assign the true box to b_batch
             # b_batch[instance_count, grid_y, grid_x, 0:4] = box
@@ -214,7 +226,7 @@ class BatchGenerator(Sequence):
             # true_box_index += 1
             # true_box_index = true_box_index % self.config['TRUE_BOX_BUFFER']
 
-            logger.debug('loop %s images converted',i)
+            logger.debug('%s: loop %s images converted',self.name,i)
                             
             # assign input image to x_batch
             # if self.norm is not None:
@@ -226,17 +238,17 @@ class BatchGenerator(Sequence):
             instance_count += 1
             image_index += 1
 
-         logger.debug('x_batch = %s',np.sum(x_batch))
-         logger.debug('y_batch = %s',np.sum(y_batch))
-         logger.debug('x_batch shape = %s',x_batch.shape)
-         logger.debug('y_batch shape = %s',y_batch.shape)
-         logger.debug('exiting getitem duration: %s, file_index = %s',(time.time() - start),self.current_file_index)
+         logger.debug('%s: x_batch = %s',self.name,np.sum(x_batch))
+         logger.debug('%s: y_batch = %s',self.name,np.sum(y_batch))
+         logger.debug('%s: x_batch shape = %s',self.name,x_batch.shape)
+         logger.debug('%s: y_batch shape = %s',self.name,y_batch.shape)
+         logger.debug('%s: exiting getitem duration: %s, file_index = %s',self.name,(time.time() - start),self.current_file_index)
 
          # print(' new batch created', idx)
 
          return x_batch, y_batch
       except Exception as e:
-         logger.exception('caught exception %s',str(e))
+         logger.exception('%s: caught exception %s',self.name,str(e))
          raise
 
    def on_epoch_end(self):

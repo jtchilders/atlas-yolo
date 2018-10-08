@@ -1,6 +1,6 @@
 {
    "data_handling": {
-      "input_file_glob":               "/Users/jchilders/git/keras-yolo2/data/*.npz",
+      "input_file_glob":               "/projects/datascience/parton/atlasml/data/*jets/*/*.npz",
       "evt_per_file":                  10,
       "image_shape":                   [16,256,9600],
       "training_to_validation_ratio":  0.8,
@@ -12,12 +12,13 @@
       "model_checkpoint_file":         "weights.{date}.{{epoch:02d}}-{{val_loss:.2f}}.hdf5"
    },
    "training": {
-      "batch_size":                    2,
+      "batch_size":                    10,
       "gridW":                         16,
       "gridH":                         40,
       "learning_rate":                 1e-4,
-      "epochs":                        5,
-      "verbose":                       1
+      "epochs":                        1,
+      "verbose":                       1,
+      "steps_per_valid":               1
    },
    "tensorboard": {
       "log_dir":                       "./logs",
