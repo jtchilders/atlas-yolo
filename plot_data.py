@@ -21,13 +21,15 @@ def main():
 
 
    for filename in filelist:
-      
+      logger.info('plotting file: %s',filename)
       data = np.load(filename)
       images = data['raw']
+      batch_size,nchannels,bins_phi,bins_eta = images.shape
       truth  = data['truth']
 
 
       for i in range(images.shape[0]):
+         logger.info('     index: %s',i)
          image = images[i]
          y = truth[i][0]
          logger.info('%s %s',image.shape,y.shape)
@@ -39,9 +41,9 @@ def main():
          # xx = np.transpose(xx)
          # logger.info('xx = %s',xx.shape)
 
-         h2_eta_phi = ROOT.TH2D('h2_eta_phi',';eta;phi',9600,0,9600,256,0,256)
-         h2_eta_depth = ROOT.TH2D('h2_eta_depth',';eta;depth',9600,0,9600,16,0,16)
-         h2_phi_depth = ROOT.TH2D('h2_phi_depth',';phi;depth',256,0,256,16,0,16)
+         h2_eta_phi = ROOT.TH2D('h2_eta_phi',';eta;phi',bins_eta,0,bins_eta,bins_phi,0,bins_phi)
+         h2_eta_depth = ROOT.TH2D('h2_eta_depth',';eta;depth',bins_eta,0,bins_eta,nchannels,0,nchannels)
+         h2_phi_depth = ROOT.TH2D('h2_phi_depth',';phi;depth',bins_phi,0,bins_phi,nchannels,0,nchannels)
 
 
          for depth in xrange(image.shape[0]):

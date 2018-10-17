@@ -1,6 +1,6 @@
 {
    "data_handling": {
-      "input_file_glob":               "/projects/datascience/parton/atlasml/data/*jets/*/*.npz",
+      "input_file_glob":               "/projects/datascience/parton/balsam/atlaswf/balsamwork/data/atlasworf_b_50to1000GEV_LT3ETA_00000024/root2numpy_3de4b9a2/output_images/*.npz",
       "evt_per_file":                  10,
       "image_shape":                   [16,256,9600],
       "training_to_validation_ratio":  0.8,
