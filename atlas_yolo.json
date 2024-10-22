@@ -1,8 +1,8 @@
 {
    "data_handling": {
-      "input_file_glob":               "/projects/datascience/parton/balsam/atlaswf/balsamwork/data/atlasworf_b_50to1000GEV_LT3ETA_00000024/root2numpy_3de4b9a2/output_images/*.npz",
+      "input_file_glob":               "/projects/atlasMLbjets/parton/numpy_data/normalized_data/*_1.npz",
       "evt_per_file":                  10,
-      "image_shape":                   [16,256,9600],
+      "image_shape":                   [15,50,1153],
       "training_to_validation_ratio":  0.8,
       "shuffle":                       true,
       "classes":                       ["udjet", "sjet", "cjet", "bjet", "other"]

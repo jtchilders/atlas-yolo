@@ -40,6 +40,8 @@ def main():
                        help='tensorboard logdir for this job.',default=None)
    parser.add_argument('--horovod', default=False,
                        help='use Horovod',action='store_true')
+   parser.add_argument('--ml_comm', default=False,
+                       help='use Cray PE ML Plugin',action='store_true')
    parser.add_argument('--num_files','-n', default=-1, type=int,
                        help='limit the number of files to process. default is all')
    parser.add_argument('--lr', default=0.01, type=int,
@@ -79,6 +81,20 @@ def main():
       if hvd.rank() > 0:
          log_level = logging.WARNING
       logging.basicConfig(level=log_level,format='%(asctime)s %(levelname)s:' + '{:05d}'.format(hvd.rank()) + ':%(name)s:%(process)s:%(thread)s:%(message)s')
+    if self.args.ml_comm:
+        logger.debug("importing ml_comm")
+        import ml_comm as mc
+        from plugin_keras import InitPluginCallback, BroadcastVariablesCallback, DistributedOptimizer
+        self.mc = mc
+        self.InitPluginCallback = InitPluginCallback
+        self.BroadcastVariablesCallback = BroadcastVariablesCallback
+        self.DistributedOptimizer = DistributedOptimizer
+        logger.info('ml_comm from: %s',mc.__file__)
+        logger.debug('mc init')
+        self.mc.init_mpi()
+        logger.info("Rank: %s",self.mc.get_rank())
+        self.rank = self.mc.get_rank()
+        self.nranks = self.mc.get_nranks()
    else:
       logging.basicConfig(level=log_level,format='%(asctime)s %(levelname)s:%(name)s:%(process)s:%(thread)s:%(message)s')
 
